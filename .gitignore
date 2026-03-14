@@ -1,0 +1,17 @@
+# Terragrunt cache -- generated locally, never commit
+**/.terragrunt-cache
+
+# Terraform local state and provider downloads
+**/.terraform
+**/.terraform.tfstate
+*.tfstate
+*.tfstate.backup
+
+# Terraform plan files
+*.tfplan
+
+# OS files
+.DS_Store
+
+# VSCode
+.vscode/

@@ -7,7 +7,7 @@
 
 # Pull in the root terragrunt.hcl for backend and provider config
 include "root" {
-  path = find_in_parent_folders()
+  path = find_in_parent_folders("root.hcl")
 }
 
 # Point to the reusable VPC module
