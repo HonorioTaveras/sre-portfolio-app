@@ -9,6 +9,7 @@ outputs:
 	@echo "=== VPC ===" && (cd terraform/envs/dev/vpc && terragrunt output)
 	@echo "=== ECR ===" && (cd terraform/envs/dev/ecr && terragrunt output)
 	@echo "=== SQS ===" && (cd terraform/envs/dev/sqs && terragrunt output)
+	@echo "=== RDS ===" && (cd terraform/envs/dev/rds && terragrunt output)
 
 # Destroy all dev infrastructure in reverse dependency order
 .PHONY: destroy-dev
