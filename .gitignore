@@ -15,3 +15,11 @@
 
 # VSCode
 .vscode/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Docker compose version warning -- remove version key

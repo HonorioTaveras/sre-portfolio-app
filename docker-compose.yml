@@ -11,7 +11,6 @@
 #   docker-compose logs -f worker -- follow worker logs
 # -----------------------------------------------------------------------------
 
-version: "3.9"
 
 services:
 
@@ -57,6 +56,8 @@ services:
     build:
       context: ./services/worker
       dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
     environment:
       DATABASE_URL: postgresql://sre_admin:devpassword123!@postgres:5432/sre_portfolio
       AWS_REGION:   us-east-1

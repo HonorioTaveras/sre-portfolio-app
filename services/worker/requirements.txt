@@ -1,3 +1,6 @@
+# Required by ddtrace
+wrapt>=1.16.0
+
 # Web framework -- worker exposes /health and /metrics endpoints
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
