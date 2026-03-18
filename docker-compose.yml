@@ -1,0 +1,73 @@
+# -----------------------------------------------------------------------------
+# Docker Compose -- Local Development
+# Runs all services locally without needing AWS or Kubernetes.
+# Postgres runs as a container, services connect to it directly.
+#
+# Usage:
+#   docker-compose up --build    -- build images and start everything
+#   docker-compose up -d         -- start in background
+#   docker-compose down          -- stop everything
+#   docker-compose logs -f api   -- follow API logs
+#   docker-compose logs -f worker -- follow worker logs
+# -----------------------------------------------------------------------------
+
+version: "3.9"
+
+services:
+
+  # Postgres database -- same version as our RDS instance
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB:       sre_portfolio
+      POSTGRES_USER:     sre_admin
+      POSTGRES_PASSWORD: devpassword123!
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persist data between docker-compose restarts
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sre_admin -d sre_portfolio"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # API service
+  api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://sre_admin:devpassword123!@postgres:5432/sre_portfolio
+      AWS_REGION:   us-east-1
+      # SQS_QUEUE_URL intentionally omitted for local dev
+      # Jobs will be created in the DB but not enqueued to SQS
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount source for hot reload during development
+      - ./services/api/app:/app/app
+
+  # Worker service
+  worker:
+    build:
+      context: ./services/worker
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://sre_admin:devpassword123!@postgres:5432/sre_portfolio
+      AWS_REGION:   us-east-1
+      # SQS_QUEUE_URL intentionally omitted -- worker starts but won't poll
+      DD_AGENT_HOST:       localhost
+      DD_TRACE_AGENT_PORT: "8126"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/worker/app:/app/app
+
+volumes:
+  postgres_data:
