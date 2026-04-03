@@ -1,15 +1,3 @@
-# -----------------------------------------------------------------------------
-# Deploy Workflow
-# Runs on every merge to main.
-# Builds Docker images, scans with Trivy, runs Terraform plan,
-# deploys to dev automatically, then waits for manual approval for prod.
-#
-# Prerequisites (set these in GitHub repo Settings > Secrets and variables > Actions):
-#   AWS_ACCOUNT_ID       -- your AWS account ID (167715593994)
-#   AWS_ACCESS_KEY_ID    -- IAM user access key
-#   AWS_SECRET_ACCESS_KEY -- IAM user secret key
-#   MANIFESTS_PAT        -- GitHub PAT with repo scope for sre-portfolio-manifests
-# -----------------------------------------------------------------------------
 name: Build and Deploy
 
 on:
@@ -21,16 +9,9 @@ env:
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # BUILD
-  # Builds both Docker images and pushes them to ECR.
-  # Uses the short git SHA as the image tag for traceability --
-  # you can always trace a running pod back to the exact commit that built it.
-  # ---------------------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
     outputs:
-      # Pass the image tag to downstream jobs so they all use the same tag
       image-tag: ${{ steps.tag.outputs.sha }}
 
     steps:
@@ -40,17 +21,15 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Generate image tag
         id: tag
-        # Use first 8 characters of git SHA as image tag
-        # Short enough to be readable, unique enough to avoid collisions
         run: echo "sha=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
 
       - name: Build and push API image
@@ -67,23 +46,17 @@ jobs:
             services/worker/
           docker push $ECR_REGISTRY/dev-sre-portfolio-worker:${{ steps.tag.outputs.sha }}
 
-  # ---------------------------------------------------------------------------
-  # SCAN
-  # Scans both images for CVEs using Trivy.
-  # Fails the pipeline if any HIGH or CRITICAL vulnerabilities are found.
-  # This is shift-left security -- catching vulnerabilities before deployment.
-  # ---------------------------------------------------------------------------
   scan:
     runs-on: ubuntu-latest
-    needs: build    # Wait for build to finish before scanning
+    needs: build
 
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -93,8 +66,8 @@ jobs:
         with:
           image-ref: ${{ env.ECR_REGISTRY }}/dev-sre-portfolio-api:${{ needs.build.outputs.image-tag }}
           format: table
-          exit-code: "1"          # Fail the pipeline on findings
-          severity: HIGH,CRITICAL # Only fail on HIGH and CRITICAL -- ignore LOW/MEDIUM
+          exit-code: "1"
+          severity: HIGH,CRITICAL
 
       - name: Scan Worker image with Trivy
         uses: aquasecurity/trivy-action@master
@@ -104,14 +77,6 @@ jobs:
           exit-code: "1"
           severity: HIGH,CRITICAL
 
-  # ---------------------------------------------------------------------------
-  # TERRAFORM PLAN
-  # Runs terragrunt plan against the dev environment.
-  # This validates that infrastructure changes are safe before applying.
-  # The plan output is visible in the GitHub Actions logs for review.
-  # Note: This only PLANS, never applies -- infrastructure changes
-  # are applied manually to maintain control over AWS costs.
-  # ---------------------------------------------------------------------------
   terraform-plan:
     runs-on: ubuntu-latest
     needs: scan
@@ -123,9 +88,85 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
-        uses: hashicorp/
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Install Terragrunt
+        run: |
+          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.0/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+
+      - name: Terragrunt plan -- VPC
+        run: |
+          cd terraform/envs/dev/vpc
+          terragrunt plan --terragrunt-non-interactive
+        continue-on-error: true
+
+      - name: Terragrunt plan -- EKS
+        run: |
+          cd terraform/envs/dev/eks
+          terragrunt plan --terragrunt-non-interactive
+        continue-on-error: true
+
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: [build, scan, terraform-plan]
+    environment: dev
+
+    steps:
+      - name: Checkout manifests repo
+        uses: actions/checkout@v4
+        with:
+          repository: HonorioTaveras/sre-portfolio-manifests
+          token: ${{ secrets.MANIFESTS_PAT }}
+
+      - name: Update API image tag
+        run: |
+          sed -i 's|tag:.*|tag: ${{ needs.build.outputs.image-tag }}|' charts/api/values-dev.yaml
+
+      - name: Update Worker image tag
+        run: |
+          sed -i 's|tag:.*|tag: ${{ needs.build.outputs.image-tag }}|' charts/worker/values-dev.yaml
+
+      - name: Commit and push updated tags
+        run: |
+          git config user.email "ci@github.com"
+          git config user.name "GitHub Actions"
+          git add charts/api/values-dev.yaml charts/worker/values-dev.yaml
+          git commit -m "ci: update dev images to ${{ needs.build.outputs.image-tag }}"
+          git push
+
+  deploy-prod:
+    runs-on: ubuntu-latest
+    needs: deploy-dev
+    environment: prod
+
+    steps:
+      - name: Checkout manifests repo
+        uses: actions/checkout@v4
+        with:
+          repository: HonorioTaveras/sre-portfolio-manifests
+          token: ${{ secrets.MANIFESTS_PAT }}
+
+      - name: Update API image tag -- prod
+        run: |
+          sed -i 's|tag:.*|tag: ${{ needs.build.outputs.image-tag }}|' charts/api/values-prod.yaml
+
+      - name: Update Worker image tag -- prod
+        run: |
+          sed -i 's|tag:.*|tag: ${{ needs.build.outputs.image-tag }}|' charts/worker/values-prod.yaml
+
+      - name: Commit and push updated tags
+        run: |
+          git config user.email "ci@github.com"
+          git config user.name "GitHub Actions"
+          git add charts/api/values-prod.yaml charts/worker/values-prod.yaml
+          git commit -m "ci: promote images to ${{ needs.build.outputs.image-tag }} [prod]"
+          git push
