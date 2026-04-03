@@ -11,7 +11,10 @@ CVE-2026-29111
 CVE-2026-0994
 
 # starlette CVE-2025-62727 -- DoS via Range header merging
-# Cannot upgrade starlette beyond 0.41.x without upgrading FastAPI beyond 0.115.x
+ç# Cannot upgrade starlette beyond 0.41.x without upgrading FastAPI beyond 0.115.x
 # which may break OTel instrumentation compatibility
-# Tracked for resolution when OTel packages support newer FastAPI
-CVE-2025-62727
+
+# starlette CVE-2024-47874 -- DoS via multipart/form-data in worker image
+# Worker uses fastapi==0.115.0 which pins starlette to 0.38.6
+# Same constraint as API -- blocked by ddtrace/OTel compatibility
+CVE-2024-47874

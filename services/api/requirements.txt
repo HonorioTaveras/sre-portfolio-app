@@ -3,7 +3,7 @@ setuptools>=69.0.0
 wrapt>=1.16.0
 
 # Web framework
-fastapi==0.115.6
+fastapi>=0.115.6
 uvicorn[standard]==0.30.6
 
 # Database
