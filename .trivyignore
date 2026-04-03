@@ -1,0 +1,6 @@
+# OS-level CVEs with no fix available in python:3.12-slim base image
+# Status: fix_deferred -- waiting on upstream Debian package maintainers
+# Reviewed: 2026-04-03
+CVE-2026-4046
+CVE-2025-69720
+CVE-2026-29111
