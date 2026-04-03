@@ -4,3 +4,8 @@
 CVE-2026-4046
 CVE-2025-69720
 CVE-2026-29111
+
+# protobuf CVE-2026-0994 -- cannot upgrade without breaking OTel package compatibility
+# opentelemetry-proto 1.27.0 requires protobuf<5.0, fix requires protobuf>=5.29.6
+# Tracked for resolution when OTel packages support protobuf 5+
+CVE-2026-0994
