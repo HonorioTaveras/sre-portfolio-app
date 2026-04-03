@@ -9,3 +9,9 @@ CVE-2026-29111
 # opentelemetry-proto 1.27.0 requires protobuf<5.0, fix requires protobuf>=5.29.6
 # Tracked for resolution when OTel packages support protobuf 5+
 CVE-2026-0994
+
+# starlette CVE-2025-62727 -- DoS via Range header merging
+# Cannot upgrade starlette beyond 0.41.x without upgrading FastAPI beyond 0.115.x
+# which may break OTel instrumentation compatibility
+# Tracked for resolution when OTel packages support newer FastAPI
+CVE-2025-62727
