@@ -1,0 +1,91 @@
+# -----------------------------------------------------------------------------
+# PR Check Workflow
+# Runs on every pull request targeting main.
+# Purpose: fast feedback for developers before code merges.
+# Does NOT build Docker images or touch AWS -- keeps it fast and cheap.
+#
+# Jobs:
+#   lint-and-test: Python lint, unit tests with a real Postgres container
+#   terraform-check: Terraform format validation
+# -----------------------------------------------------------------------------
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint and Test
+  # Runs Python linting and unit tests against a real Postgres container.
+  # Using a real DB (not mocks) catches connection and query issues early.
+  # ---------------------------------------------------------------------------
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    # Spin up a Postgres container as a service alongside the job
+    # The API and worker can connect to it at localhost:5432
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB:       test_db
+          POSTGRES_USER:     test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        # Wait for Postgres to be ready before running tests
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip    # Cache pip downloads -- speeds up subsequent runs
+
+      - name: Install API dependencies
+        run: pip install ruff pytest -r services/api/requirements.txt
+
+      - name: Lint -- API
+        run: ruff check services/api/
+
+      - name: Lint -- Worker
+        run: ruff check services/worker/
+
+      - name: Run API tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+          SQS_QUEUE_URL: ""    # Not needed for unit tests
+          AWS_REGION: us-east-1
+        run: pytest services/api/tests/ -v
+
+  # ---------------------------------------------------------------------------
+  # Terraform Format Check
+  # Validates that all Terraform files are properly formatted.
+  # Fails the PR if someone forgot to run terraform fmt.
+  # This is a fast, cheap check that enforces code style consistency.
+  # ---------------------------------------------------------------------------
+  terraform-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive terraform/
+        # -check: exit with non-zero if any files need formatting (don't modify)
+        # -recursive: check all .tf files in all subdirectories
