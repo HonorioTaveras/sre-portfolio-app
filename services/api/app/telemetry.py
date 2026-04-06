@@ -1,14 +1,9 @@
 # -----------------------------------------------------------------------------
 # OpenTelemetry Setup
-# Configures distributed tracing for the API service.
-# Traces are sent to the OTel Collector which fans them out to
-# Grafana Tempo and Datadog simultaneously.
-#
-# Uses lazy imports so the app starts successfully even if OTel
-# packages have compatibility issues -- tracing is observability
-# infrastructure and should never crash the application.
+# Configures distributed tracing using environment-variable-driven
+# auto-configuration. The OTel SDK reads OTEL_EXPORTER_OTLP_ENDPOINT
+# automatically when we initialize the TracerProvider.
 # -----------------------------------------------------------------------------
-
 import os
 import logging
 
@@ -18,15 +13,9 @@ logger = logging.getLogger(__name__)
 def setup_telemetry(service_name: str) -> None:
     """
     Initialize OpenTelemetry tracing.
-
-    Gracefully handles missing or incompatible OTel packages --
-    the application always starts, tracing is best-effort.
-
-    Args:
-        service_name: Identifies this service in traces
+    Uses explicit SDK setup with resource attributes for service identification.
     """
     otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-
     if not otlp_endpoint:
         logger.info("OTEL_EXPORTER_OTLP_ENDPOINT not set -- tracing disabled")
         return
@@ -34,22 +23,46 @@ def setup_telemetry(service_name: str) -> None:
     try:
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.resources import Resource
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-        provider = TracerProvider()
-        exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+        # Resource identifies this service in traces
+        resource = Resource.create({
+            "service.name": service_name,
+            "service.version": os.environ.get("DD_VERSION", "unknown"),
+            "deployment.environment": os.environ.get("DD_ENV", "dev"),
+        })
+
+        # Create provider with resource
+        provider = TracerProvider(resource=resource)
+
+        # Configure OTLP exporter
+        # insecure=True is set via environment variable for 1.27.0 compatibility
+        os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+        exporter = OTLPSpanExporter(
+            endpoint=otlp_endpoint,
+        )
+
+        # Batch processor -- buffers spans and exports in batches
+        processor = SimpleSpanProcessor(exporter)
+        provider.add_span_processor(processor)
+
+        # Register as the global provider -- this is the critical step
         trace.set_tracer_provider(provider)
 
-        # Auto-instrument FastAPI and SQLAlchemy
+        logger.info(f"TracerProvider configured: {provider}")
+        logger.info(f"Exporter endpoint: {otlp_endpoint}")
+
+        # Auto-instrument FastAPI
         try:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-            FastAPIInstrumentor.instrument()
+            FastAPIInstrumentor().instrument()
             logger.info("FastAPI auto-instrumentation enabled")
         except Exception as e:
             logger.warning(f"FastAPI instrumentation unavailable: {e}")
 
+        # Auto-instrument SQLAlchemy
         try:
             from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
             SQLAlchemyInstrumentor().instrument()
@@ -60,5 +73,4 @@ def setup_telemetry(service_name: str) -> None:
         logger.info(f"Tracing enabled for {service_name} -> {otlp_endpoint}")
 
     except Exception as e:
-        # Never crash the app because tracing failed
-        logger.warning(f"Failed to initialize tracing: {e}")
+        logger.warning(f"Failed to initialize tracing: {e}", exc_info=True)

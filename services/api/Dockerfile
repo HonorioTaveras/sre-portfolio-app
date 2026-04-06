@@ -17,7 +17,8 @@ WORKDIR /build
 # If requirements.txt hasn't changed, Docker skips the pip install
 # on subsequent builds which saves significant time.
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt && \
+    pip install --no-cache-dir --prefix=/install setuptools
 
 
 # ---- Stage 2: Runtime ----
@@ -41,4 +42,4 @@ EXPOSE 8000
 
 # Start the FastAPI application
 # --host 0.0.0.0 makes it accessible from outside the container
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["opentelemetry-instrument", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
