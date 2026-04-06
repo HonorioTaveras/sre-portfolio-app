@@ -11,6 +11,8 @@
 
 import os
 import logging
+# Ensure pkg_resources is available for OTel instrumentation packages
+import pkg_resources  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
