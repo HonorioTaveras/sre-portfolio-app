@@ -1,5 +1,4 @@
 # Required by opentelemetry instrumentation packages
-setuptools==69.5.1
 wrapt>=1.16.0
 
 # Web framework

@@ -18,7 +18,7 @@ WORKDIR /build
 # on subsequent builds which saves significant time.
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt && \
-    pip install --no-cache-dir --prefix=/install setuptools
+    pip install --no-cache-dir --prefix=/install "setuptools==69.5.1"
 
 
 # ---- Stage 2: Runtime ----

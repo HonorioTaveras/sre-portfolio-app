@@ -11,10 +11,20 @@ CVE-2026-29111
 CVE-2026-0994
 
 # starlette CVE-2025-62727 -- DoS via Range header merging
-ç# Cannot upgrade starlette beyond 0.41.x without upgrading FastAPI beyond 0.115.x
+# Cannot upgrade starlette beyond 0.41.x without upgrading FastAPI beyond 0.115.x
 # which may break OTel instrumentation compatibility
+# Tracked for resolution when OTel packages support newer FastAPI
+CVE-2025-62727
 
 # starlette CVE-2024-47874 -- DoS via multipart/form-data in worker image
 # Worker uses fastapi==0.115.0 which pins starlette to 0.38.6
 # Same constraint as API -- blocked by ddtrace/OTel compatibility
 CVE-2024-47874
+
+# setuptools CVE-2024-6345 and CVE-2025-47273
+# setuptools 69.5.1 required for pkg_resources which is needed by
+# opentelemetry-instrument CLI wrapper for auto-instrumentation.
+# These CVEs affect PackageIndex download functionality which is never
+# called in our runtime web service. Not exploitable in this context.
+CVE-2024-6345
+CVE-2025-47273
