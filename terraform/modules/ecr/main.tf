@@ -10,6 +10,7 @@ resource "aws_ecr_repository" "repos" {
   for_each = toset(var.services)
 
   name                 = "${var.env}-${each.value}"
+  force_delete         = true
   image_tag_mutability = "MUTABLE"
 
   # Scan images for vulnerabilities on every push
