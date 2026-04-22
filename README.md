@@ -5,6 +5,8 @@ container orchestration, GitOps, observability, and resilience engineering on AW
 
 ## Architecture Overview
 
+![Architecture Diagram](docs/architecture.png)
+
 ```
 GitHub Actions CI/CD
         │
